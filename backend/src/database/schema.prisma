@@ -1,0 +1,877 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  IGNORED
+  EXPIRED
+}
+
+enum AccountType {
+  FREE
+  PREMIUM
+}
+
+model Company {
+  companyID                 String      @id @default(uuid())
+  companyName               String      @unique
+  companyWorkspaceName      String      @unique
+  companyAddress            String      @unique
+  companyEmail              String      @unique
+  companyRegistrationNumber String      @unique
+  companyPhoneNumber        String?     @unique
+  companyTeamSize           BigInt
+  companyTimeZone           String?
+  companyWebsite            String?
+  companyPitch              String?
+  companyLogoURL            String?
+  isCertified               Boolean?
+  certificationsIsPublic    Boolean?    @default(true)
+  isIndexed                 Boolean?    @default(false)
+  companyAccountType        AccountType
+  storageLimit              Decimal
+  displayPriority           Int
+  hasReceivedReminderPeriod Boolean     @default(false)
+
+  // Relationships
+  users      User[]
+  tools      Tool[]
+  industries Industry[]
+  projects   Project[]
+
+  serviceCompanies       ServiceCompany[]
+  sharedDailyRates       SharedDailyRate[]
+  certificationCompanies CertificationCompany[]
+
+  contacts              Contact[]
+  connectionInvitations ConnectionInvitation[]
+  VendorPoolRequest     VendorPoolRequest[]
+  ChatUsers             ChatUser[]
+  companyStorage        CompanyStorage?
+  customAttributes      CustomAttribute[]
+}
+
+model Industry {
+  industryID   String @id @default(uuid())
+  industryName String @unique
+
+  // Relationships
+  companies Company[]
+}
+
+model Certification {
+  certificationID   String @id @default(uuid())
+  certificationName String @unique
+
+  // Relationships
+  certificationCompanies CertificationCompany[]
+}
+
+model CertificationCompany {
+  companyID          String
+  certificationID    String
+  isKeyCertification Boolean       @default(false)
+  // Relationships
+  company            Company       @relation(fields: [companyID], references: [companyID])
+  certification      Certification @relation(fields: [certificationID], references: [certificationID])
+
+  @@id([companyID, certificationID])
+}
+
+// Enum for notification status
+enum MainNotificationStatus {
+  UNREAD
+  READ
+}
+
+model User {
+  id                        String   @id @default(uuid())
+  firstName                 String
+  lastName                  String
+  phoneNumber               String   @unique
+  position                  String?
+  email                     String   @unique
+  password                  String
+  avatarURL                 String?
+  emailVerified             Boolean  @default(false)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  accountDisabled           Boolean  @default(false)
+  isDefaultUser             Boolean
+  isCompanySuspended        Boolean  @default(false)
+  hasReceivedReminderPeriod Boolean  @default(false)
+  isDeleted                 Boolean  @default(false)
+
+  // Relationships
+  company   Company?  @relation(fields: [companyID], references: [companyID])
+  companyID String?
+  Role      Role?     @relation(fields: [roleID], references: [roleID])
+  roleID    String?
+  sessions  Session[]
+  accounts  Account[]
+  notifications   MainNotification[]
+}
+
+model MainNotification {
+  id        String                 @id @default(uuid())
+  title     String
+  message   String
+  status    MainNotificationStatus @default(UNREAD)
+  createdAt DateTime               @default(now())
+
+  // Relation: Many notifications belong to one user
+  user      User   @relation(fields: [userId], references: [id])
+  userId    String
+}
+
+
+model Session {
+  id                   String   @id
+  expiresAt            DateTime
+  token                String
+  createdAt            DateTime
+  updatedAt            DateTime
+  ipAddress            String?
+  userAgent            String?
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganizationId String?
+
+  @@unique([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime?
+  updatedAt  DateTime?
+
+  @@map("verification")
+}
+
+model RateLimit {
+  id          String  @id
+  key         String?
+  count       Int?
+  lastRequest BigInt?
+
+  @@map("rateLimit")
+}
+
+model Tool {
+  toolID           String   @id @default(uuid())
+  toolName         String   @unique
+  isAddedByCompany Boolean? @default(false)
+  addedByCompanyID String?
+  industryName     String
+
+  // Relationships
+  companies Company[]
+}
+
+model Service {
+  serviceID          String  @id @default(uuid())
+  serviceName        String  @unique
+  isAddedByCompany   Boolean @default(false)
+  addedByCompanyID   String?
+  defaultDescription String?
+  industryName       String
+
+  serviceCompanies ServiceCompany[]
+  sharedDailyRates SharedDailyRate[]
+}
+
+model ServiceCompany {
+  companyID         String
+  serviceID         String
+  customDescription String?
+  hasPublicRate     Boolean  @default(true)
+  publicDailyRate   Decimal?
+  isKeyService      Boolean  @default(false)
+
+  company Company @relation(fields: [companyID], references: [companyID])
+  service Service @relation(fields: [serviceID], references: [serviceID])
+
+  @@id([companyID, serviceID])
+}
+
+model SharedDailyRate {
+  serviceID       String
+  ownerCompanyID  String
+  targetCompanyID String
+  dailyRateShared Decimal?
+
+  // Relationships
+  service      Service @relation(fields: [serviceID], references: [serviceID])
+  ownerCompany Company @relation(fields: [ownerCompanyID], references: [companyID])
+
+  @@id([serviceID, ownerCompanyID, targetCompanyID])
+}
+
+model Contact {
+  contactID                 String   @id @default(uuid())
+  contactCompanyID          String
+  addedByOutgoingInvitation Boolean
+  addedByIncomingInvitation Boolean
+  addedAt                   DateTime
+  invitationID              String
+  isFavorite                Boolean  @default(false)
+  vendorPoolRequestID       String?
+
+  // Relationships
+  company   Company @relation(fields: [companyID], references: [companyID])
+  companyID String
+}
+
+model VendorPoolRequest {
+  vendorPoolRequestID String    @id @default(uuid())
+  contactID           String
+  requestedByUserID   String
+  requestedAt         DateTime
+  isAccepted          Boolean   @default(false)
+  approvedByUserID    String?
+  approvedAt          DateTime?
+
+  // Relationships
+  company   Company @relation(fields: [companyID], references: [companyID])
+  companyID String
+}
+
+model ConnectionInvitation {
+  connectionInvitationID String           @id @default(uuid())
+  targetCompanyID        String
+  status                 InvitationStatus
+  sendAt                 DateTime
+  acceptedAt             DateTime?
+
+  // Relationships
+  company   Company @relation(fields: [companyID], references: [companyID])
+  companyID String
+}
+
+model Role {
+  roleID   String @id @default(uuid())
+  roleName String @unique
+
+  // Relationships
+  users       User[]
+  permissions Permission[]
+}
+
+model Permission {
+  permissionID   String @id @default(uuid())
+  permissionName String
+
+  // Relationships
+  roles Role[]
+}
+
+model Setting {
+  settingID    String   @id @default(uuid())
+  key          String   @unique
+  decimalValue Decimal?
+  intValue     Int?
+}
+
+model ChatUser {
+  chatUserID      String  @id @default(uuid())
+  userFirstName   String
+  userLastName    String
+  userPosition    String
+  userCompanyName String
+  avatarURL       String
+  isDeleted       Boolean @default(false)
+  userID          String
+
+  // Relationships
+  company   Company @relation(fields: [companyID], references: [companyID])
+  companyID String
+}
+
+model CompanyStorage {
+  companyStorageID    String        @id @default(uuid())
+  totalResourcesSize  Decimal       @default(0.0)
+  totalPortfoliosSize Decimal       @default(0.0)
+  totalUsedSpace      Decimal       @default(0.0)
+  remainingSpace      Decimal       @default(0.0)
+  storageStatus       StorageStatus @default(EMPTY)
+
+  // Relations
+  companyID String  @unique
+  company   Company @relation(fields: [companyID], references: [companyID])
+}
+
+enum StorageStatus {
+  EMPTY
+  LOW
+  MEDIUM
+  NEAR_FULL
+  FULL
+}
+
+model CustomAttribute {
+  customAttributeID    String              @id @default(uuid())
+  customAttributeLabel String              
+  customAttributeType  CustomAttributeType
+
+  entityType EntityType
+
+  // Relations
+  companyID String  
+  company   Company @relation(fields: [companyID], references: [companyID])
+}
+
+enum EntityType {
+  PROJECT
+  TASK
+}
+
+// part 2 
+
+model Project {
+  projectID            String   @id @default(uuid())
+  projectName          String   
+  projectDescription   String?
+  projectStartDate     DateTime
+  projectDeadline      DateTime
+  projectCreatorID     String
+  userCreatorFirstName String
+  userCreatorLastName  String
+  userCreatorPosition  String?
+  projectCreatedAt     DateTime
+
+  // Relations
+
+  companyID String 
+  company   Company @relation(fields: [companyID], references: [companyID], onDelete: Cascade)
+
+  clientUsers                  ClientUser[]
+  collaboratorUsers            CollaboratorUser[]
+  projectCustomAttributes      ProjectCustomAttribute[]
+  collaborationInvitations     CollaborationInvitation[]
+  folder                       Folder?
+  collaboratingCompanyProjects CollaboratingCompanyProject[]
+}
+
+model CollaborationInvitation {
+  projectID              String
+  collaboratingCompanyID String
+
+  status       CollaborationInvitationStatus @default(PENDING)
+  sentAt       DateTime                      @default(now())
+  sentByUserID String
+  acceptedAt   DateTime?
+
+  // Relations
+
+  project              Project              @relation(fields: [projectID], references: [projectID], onDelete: Cascade)
+  collaboratingCompany CollaboratingCompany @relation(fields: [collaboratingCompanyID], references: [collaboratingCompanyID], onDelete: Cascade)
+
+  @@id([projectID, collaboratingCompanyID])
+}
+
+model CollaboratingCompany {
+  collaboratingCompanyID                  String                        @id @default(uuid())
+  collaboratingCompanyName                String
+  collaboratingCompanyEmail               String
+  collaboratingCompanyResigstrationNumber String
+  collaboratingCompanyLogoUrl             String?
+  companyID                               String?                        @unique
+  collaborationInvitations                CollaborationInvitation[]
+  projects                                CollaboratingCompanyProject[]
+}
+
+model CollaboratingCompanyProject {
+  collaboratingCompanyID String
+  projectID              String
+  addedToProjectAt       DateTime
+  addedToProjectbyUserID String
+
+  // Relations
+
+  project              Project              @relation(fields: [projectID], references: [projectID], onDelete: Cascade)
+  collaboratingCompany CollaboratingCompany @relation(fields: [collaboratingCompanyID], references: [collaboratingCompanyID], onDelete: Cascade)
+
+  @@id([projectID, collaboratingCompanyID])
+}
+
+enum CollaborationInvitationStatus {
+  PENDING
+  ACCEPTED
+  NOT_AVAILABLE
+  EXPIRED
+}
+
+model ProjectCustomAttribute {
+  projectCustomAttributeID String              @id @default(uuid())
+  customAttributeLabel     String              
+  customAttributeType      CustomAttributeType
+  textValue                String?
+  dateValue                DateTime?
+  integerValue             BigInt?
+  decimalValue             Decimal?
+  urlValue                 String?
+  longTextValue            String?
+  customAttributeID        String
+
+  // Relations
+  projectID String  
+  project   Project @relation(fields: [projectID], references: [projectID], onDelete: Cascade)
+
+  projectCustomAttributeResource ProjectCustomAttributeResource?
+
+  @@index([projectID])
+}
+
+model ProjectCustomAttributeResource {
+  projectCustomAttributeResourceID String  @id @default(uuid())
+  audioUrl                         String?
+  imageUrl                         String?
+  videoUrl                         String?
+  documentUrl                      String?
+  archiveUrl                       String?
+
+  mimeType MimeType
+  checkSum String
+
+  fileSize         Decimal?
+  uploadedByUserID String
+  uploadedAt       DateTime
+
+  projectCustomAttributeID String                 @unique
+  projectCustomAttribute   ProjectCustomAttribute @relation(fields: [projectCustomAttributeID], references: [projectCustomAttributeID], onDelete: Cascade)
+}
+
+enum MimeType {
+  // Images
+  JPG
+  JPEG
+  PNG
+  GIF
+  BMP
+  WEBP
+
+  // Videos
+  MP4
+  MOV
+  AVI
+  MKV
+  WEBM
+
+  // Audio
+  MP3
+  WAV
+  OGG
+  M4A
+
+  // Documents
+  PDF
+  DOC
+  DOCX
+  XLS
+  XLSX
+
+  // Archives
+  ZIP
+  RAR
+  SEVEN_Z
+  TAR
+  GZ
+
+}
+
+enum CustomAttributeType {
+  TEXT
+  DATE
+  INTEGER
+  DECIMAL
+  URL
+  LONGTEXT
+  AUDIO
+  IMAGE
+  VIDEO
+  DOCUMENT
+  ARCHIVE
+}
+
+model ClientUser {
+  clientUserID String @id @default(uuid())
+  userID       String @unique
+
+  clientUserFirstName String
+  clientUserLastName  String
+  clientUserPosition  String?
+  clientUserAvatarUrl String?
+
+  isProjectCreator Boolean  @default(false)
+  addedToProjectAt DateTime
+
+  // Relations
+  projectID String  
+  project   Project @relation(fields: [projectID], references: [projectID], onDelete: Cascade)
+
+  @@index([projectID])
+}
+
+model CollaboratorUser {
+  collaboratorUserID        String   @id @default(uuid())
+  userID                    String
+  collaboratorUserFirstName String
+  collaboratorUserLastName  String
+  collaboratorUserPosition  String?
+  collaboratorUserAvatarUrl String?
+  addedToProjectAt          DateTime
+  collaboratingCompanyID    String?
+
+  // Relations
+  projectID String  
+  project   Project @relation(fields: [projectID], references: [projectID], onDelete: Cascade)
+
+  @@index([projectID])
+}
+
+model Folder {
+  folderID   String @id @default(uuid())
+  folderName String @unique
+
+  isRoot       Boolean  @default(false)
+  level        Int
+  indexInLevel Int
+  createdAt    DateTime
+
+  // Relations
+  projectID String  @unique
+  project   Project @relation(fields: [projectID], references: [projectID], onDelete: Cascade)
+
+  // Self relation (parent/children)
+  parentID String?
+  parent   Folder?  @relation("FolderChildren", fields: [parentID], references: [folderID], onDelete: SetNull)
+  children Folder[] @relation("FolderChildren")
+
+  tasks Task[]
+
+  @@index([parentID])
+}
+
+model Task {
+  taskID                          String       @id @default(uuid())
+  taskName                        String       @unique
+  taskPath                        String
+  insdustryName                   String
+  serviceName                     String
+  taskDescription                 String?
+  internalBid                     Int?
+  deadline                        DateTime?
+  collaboratorBid                 Int?
+  collaboratorEstimatedCompletion DateTime?
+  taskCost                        Decimal?
+  taskStatus                      TaskStatus   @default(READY_TO_START)
+  taskPriority                    TaskPriority @default(NONE)
+  taskState                       TaskState    @default(TO_ASSIGN)
+  collaboratingCompanyID          String
+
+  // Relations
+
+  folderID String
+  folder   Folder @relation(fields: [folderID], references: [folderID], onDelete: Cascade)
+
+  taskNotes            TaskNote[]
+  versions             Verison[]
+  taskMaterials        taskMaterial[]
+  taskCustomAttributes TaskCustomAttribute[]
+
+  taskCollaboratorPermission TaskCollaboratorPermission?
+
+  @@index([folderID])
+}
+
+model TaskCustomAttribute {
+  taskCustomAttributeID String              @id @default(uuid())
+  customAttributeLabel  String              
+  customAttributeType   CustomAttributeType
+  textValue             String?
+  dateValue             DateTime?
+  integerValue          BigInt?
+  decimalValue          Decimal?
+  urlValue              String?
+  longTextValue         String?
+  customAttributeID     String
+
+  // Relations
+  taskID String 
+  task   Task   @relation(fields: [taskID], references: [taskID], onDelete: Cascade)
+
+  taskCustomAttributeResource TaskCustomAttributeResource?
+}
+
+model TaskCustomAttributeResource {
+  taskCustomAttributeResourceID String  @id @default(uuid())
+  audioUrl                      String?
+  imageUrl                      String?
+  videoUrl                      String?
+  documentUrl                   String?
+  archiveUrl                    String?
+
+  mimeType MimeType
+  checkSum String
+
+  fileSize         Decimal?
+  uploadedByUserID String
+  uploadedAt       DateTime
+
+  // Relations
+  taskCustomAttributeID String              @unique
+  taskCustomAttribute   TaskCustomAttribute @relation(fields: [taskCustomAttributeID], references: [taskCustomAttributeID], onDelete: Cascade)
+}
+
+model TaskCollaboratorPermission {
+  taskCollaboratorPermissionID String  @id @default(uuid())
+  canUpdateBid                 Boolean @default(false)
+  canUpdateEstimatedCompletion Boolean @default(false)
+  canUpdateCost                Boolean @default(false)
+
+  // Relations
+  taskID String @unique
+  task   Task   @relation(fields: [taskID], references: [taskID], onDelete: Cascade)
+}
+
+enum TaskStatus {
+  READY_TO_START
+  IN_PROGRESS
+  ON_HOLD
+  OMITTED
+  AWAITING_MATERIAL
+  DELIVERED
+  KICKBACK
+  APPROVED
+  COMPLETED
+  TBC
+}
+
+enum TaskPriority {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+  CRITICAL
+}
+
+enum TaskState {
+  TO_ASSIGN
+  ASSIGNED
+  PUBLISHED
+}
+
+model TaskNote {
+  taskNoteID            String         @id @default(uuid())
+  authorType            NoteAuthorType
+  userFirstName         String
+  userLastName          String
+  userAvatarUrl         String?
+  taskNoteContent       String?
+  attachementUrl        String?
+  attachementSize       Decimal?
+  attachementMimeType   MimeType?
+  attachementChecksum   String?
+  attachementUploadedAt DateTime?
+  taskNoteCreatedat     DateTime
+  isTaskNoteUpdated     Boolean        @default(false)
+  taskNoteUpdateat      DateTime?
+  userAuthorID          String
+
+  // Relations
+  taskID String
+  task   Task   @relation(fields: [taskID], references: [taskID], onDelete: Cascade)
+
+  @@index([taskID])
+}
+
+model taskMaterial {
+  taskMaterialID           String   @id @default(uuid())
+  taskMaterialName         String   
+  taskMaterialWithResource Boolean
+  taskMaterialWithPackage  Boolean
+  sentAt                   DateTime
+  updatedAt                DateTime
+  isTaskMaterialUpdated    Boolean   @default(false)
+  userSenderID             String
+
+  // Relations
+  taskID String
+  task   Task   @relation(fields: [taskID], references: [taskID], onDelete: Cascade)
+
+  resources taskMaterialResource[]
+  package   taskMaterialPackage?
+
+  feedback TaskMaterialFeedback?
+
+  @@index([taskID])
+}
+
+model taskMaterialResource {
+  taskMaterialResourceID String   @id @default(uuid())
+  resourceUrl            String
+  resourceSize           Decimal
+  resourceMimeType       MimeType
+  checkSum               String
+  uploadedByUserID       String
+  uploadedAt             DateTime
+
+  // Relations
+  taskMaterialID String
+  taskMaterial   taskMaterial @relation(fields: [taskMaterialID], references: [taskMaterialID], onDelete: Cascade)
+
+  @@index([taskMaterialID])
+}
+
+model taskMaterialPackage {
+  taskMaterialPackageID String   @id @default(uuid())
+  packageName           String
+  sentAt                DateTime
+
+  packageLink            String
+  metadataPassword       String?
+  metadataText           String?
+  metadataExporationDate DateTime?
+
+  // Relations
+
+  taskMaterialID String       @unique
+  taskMaterial   taskMaterial @relation(fields: [taskMaterialID], references: [taskMaterialID], onDelete: Cascade)
+
+  @@index([taskMaterialID])
+}
+
+model TaskMaterialFeedback {
+  taskMaterialFeedbackID String @id @default(uuid())
+
+  feedbackType FeedBackType
+  feedbackNote String?
+
+  createdAt            DateTime
+  isUpdated            Boolean?
+  updatedAt            DateTime?
+  userReciverFirstName String
+  userReciverLastName  String
+  userReciverAvatarUrl String?
+  userReciverID        String
+
+  // Relations
+  taskMaterialID String       @unique
+  taskMaterial   taskMaterial @relation(fields: [taskMaterialID], references: [taskMaterialID], onDelete: Cascade)
+}
+
+model Verison {
+  versionID            String   @id @default(uuid())
+  versionName          String   
+  versionWithResources Boolean
+  versionWithPackage   Boolean
+  sendAt               DateTime
+  updatedAt            DateTime
+  isVersionUpdated     Boolean   @default(false)
+  userSenderID         String
+
+  // Relations
+  taskID String
+  task   Task   @relation(fields: [taskID], references: [taskID], onDelete: Cascade)
+
+  feedback         VersionFeedback?
+  versionResources VersionResource[]
+  versionPackages  VersionPackage?
+
+  @@index([taskID])
+}
+
+model VersionFeedback {
+  versionFeedbackID String       @id @default(uuid())
+  feedbackType      FeedBackType
+  feedbackNote      String?
+
+  createdAt            DateTime
+  isUpdated            Boolean?
+  updatedAt            DateTime?
+  userReciverFirstName String
+  userReciverLastName  String
+  userReciverAvatarUrl String?
+  userReciverID        String
+
+  // Relations
+  versionID String  @unique
+  version   Verison @relation(fields: [versionID], references: [versionID], onDelete: Cascade)
+}
+
+model VersionPackage {
+  versionPackageID String   @id @default(uuid())
+  packageName      String
+  sentAt           DateTime
+
+  packageLink            String
+  metadataPassword       String?
+  metadataText           String?
+  metadataExporationDate DateTime?
+
+  // Relations
+  versionID String  @unique
+  version   Verison @relation(fields: [versionID], references: [versionID], onDelete: Cascade)
+}
+
+model VersionResource {
+  versionResourceID String   @id @default(uuid())
+  resourceUrl       String
+  resourceSize      Decimal
+  resourceMimeType  MimeType
+  checkSum          String
+  uploadedByUserID  String
+  uploadedAt        DateTime
+
+  // Relations
+  versionID String
+  version   Verison @relation(fields: [versionID], references: [versionID], onDelete: Cascade)
+}
+
+enum FeedBackType {
+  PROCESSED_SUCCESSFULLY
+  MISSING_DATA
+  REMARK
+}
+
+enum NoteAuthorType {
+  CLIENT
+  COLLABORATOR
+}

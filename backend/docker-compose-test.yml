@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  visionVFX_postgres_test:
+    image: postgres:alpine
+    container_name: test_postgres
+    restart: 'no'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $POSTGRES_USER']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file:
+      - .env.test
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - '5444:5432' # Different port to avoid conflict with the development environment
+    volumes:
+      - visionVFX_postgres_test:/var/lib/postgresql/data
+
+networks:
+  default:
+    name: visionVFX_network_test
+
+volumes:
+  visionVFX_postgres_test:
